@@ -1,1 +1,138 @@
 
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QR Attendance Scanner</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f1f5f9;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .container {
+      max-width: 450px;
+      margin: auto;
+      background: white;
+      padding: 20px;
+      border-radius: 15px;
+    }
+
+    #reader {
+      width: 100%;
+      margin-top: 20px;
+    }
+
+    #message {
+      margin-top: 15px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h2>QR Attendance Scanner</h2>
+    <p>Scan student's QR Code</p>
+
+    <div id="reader"></div>
+    <p id="message">Initializing scanner...</p>
+
+    <div id="result" hidden>
+      <h3 id="name"></h3>
+      <p id="grade"></p>
+      <p id="section"></p>
+      <p id="time"></p>
+      <h3 id="status"></h3>
+    </div>
+  </div>
+
+<script>
+  const SCRIPT_URL = "PASTE_YOUR_WEB_APP_URL_HERE";
+
+  let scanner;
+  let processing = false;
+
+  async function startScanner() {
+    try {
+      scanner = new Html5Qrcode("reader");
+
+      const cameras = await Html5Qrcode.getCameras();
+
+      if (!cameras.length) {
+        throw new Error("No camera detected.");
+      }
+
+      const camera = cameras.find(c =>
+        /back|rear|environment/i.test(c.label)
+      ) || cameras[0];
+
+      await scanner.start(
+        camera.id,
+        { fps: 10, qrbox: 250 },
+        async function(token) {
+          if (processing) return;
+
+          processing = true;
+          document.getElementById("message").textContent =
+            "Recording attendance...";
+
+          try {
+            const response = await fetch(SCRIPT_URL, {
+              method: "POST",
+              headers: {
+                "Content-Type": "text/plain;charset=utf-8"
+              },
+              body: JSON.stringify({ token: token })
+            });
+
+            const result = await response.json();
+
+            if (!result.success) {
+              throw new Error(result.message);
+            }
+
+            document.getElementById("name").textContent = result.name;
+            document.getElementById("grade").textContent = result.grade;
+            document.getElementById("section").textContent = result.section;
+            document.getElementById("time").textContent = result.time;
+            document.getElementById("status").textContent = result.status;
+
+            document.getElementById("result").hidden = false;
+            document.getElementById("message").textContent =
+              "Attendance recorded successfully!";
+
+          } catch (error) {
+            document.getElementById("message").textContent =
+              error.message;
+          }
+
+          setTimeout(async function() {
+            document.getElementById("result").hidden = true;
+            document.getElementById("message").textContent =
+              "Ready for next scan.";
+
+            processing = false;
+            await scanner.resume();
+          }, 3000);
+        }
+      );
+
+      document.getElementById("message").textContent =
+        "Camera ready. Scan a QR Code.";
+
+    } catch (error) {
+      document.getElementById("message").textContent =
+        "Camera error: " + error.message;
+    }
+  }
+
+  startScanner();
+</script>
+</body>
+</html>
+
